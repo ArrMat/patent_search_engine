@@ -1,0 +1,29 @@
+[project]
+name = "search-engine"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "arrmat", email = "matiarrua97@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.163.1",
+    "psycopg[binary]>=3.3.9",
+    "qdrant-client[fastembed]>=1.20.0",
+]
+
+[project.scripts]
+search-engine = "search_engine:main"
+clean-patents = "search_engine.clean:main"
+eval-search = "search_engine.evaluate:main"
+bench-search = "search_engine.bench:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

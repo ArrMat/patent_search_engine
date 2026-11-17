@@ -1,0 +1,53 @@
+services:
+  app:
+    build: .
+    profiles: [app] # `docker compose --profile app up`; plain `up` still starts only the DBs
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/patents
+      QDRANT_URL: http://qdrant:6333
+    ports: ["8000:8000"]
+    volumes:
+      - ./data:/app/data # raw in, clean out (same files as `uv run`)
+      - models:/models # downloaded models survive rebuilds
+    depends_on:
+      postgres: { condition: service_healthy }
+      qdrant: { condition: service_started }
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres # local dev only
+      POSTGRES_DB: patents
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d patents"]
+      interval: 2s
+      retries: 30
+
+  postgres-test: # tests only: separate port, data in RAM (gone when the container stops)
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: patents_test
+    ports: ["5433:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d patents_test"]
+      interval: 2s
+      retries: 30
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    ports: ["6333:6333"]
+    volumes: [qdrant:/qdrant/storage]
+
+  qdrant-test: # tests only: separate port, storage in RAM (gone when the container stops)
+    image: qdrant/qdrant:v1.20.0
+    ports: ["6335:6333"]
+    tmpfs: [/qdrant/storage]
+
+volumes:
+  pgdata:
+  qdrant:
+  models:

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patent search</title>
+<style>
+  :root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; --accent: #2457c5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161616; --fg: #e8e8e8; --muted: #999; --line: #333; --accent: #7aa2ff; }
+  }
+  body { margin: 0 auto; max-width: 860px; padding: 24px 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, sans-serif; }
+  form { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  label { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  input, select, button { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                          background: var(--bg); color: var(--fg); }
+  .wide { grid-column: 1 / -1; }
+  button { background: var(--accent); color: #fff; border: 0; cursor: pointer; }
+  #status { color: var(--muted); margin: 16px 0 8px; }
+  ol { padding-left: 24px; }
+  li { margin-bottom: 10px; }
+  a { color: var(--accent); cursor: pointer; }
+  .meta { color: var(--muted); font-size: 13px; }
+  dialog { max-width: 760px; width: calc(100% - 32px); background: var(--bg); color: var(--fg);
+           border: 1px solid var(--line); border-radius: 8px; }
+  dialog h3 { margin-top: 0; }
+</style>
+</head>
+<body>
+<h1>Patent search</h1>
+<p class="meta">Demo client for the API (<a href="/docs">/docs</a>). Not the Part 3 "Interface at Scale" enhancement.</p>
+<form id="f">
+  <label class="wide">Query <input name="query" required value="wheel spoke with reinforced rim"></label>
+  <label>Classification prefixes (comma-separated) <input name="cls" placeholder="B60B, B62K"></label>
+  <label>Keywords in title/abstract (comma-separated) <input name="kw" placeholder="wheel"></label>
+  <label>Exact title <input name="title"></label>
+  <label>Ranking
+    <select name="hybrid"><option value="1">Meaning + keyword</option><option value="0">Meaning only</option></select>
+  </label>
+  <label>Rerank
+    <select name="rerank"><option>none</option><option>blend</option><option>cross_encoder</option></select>
+  </label>
+  <label>Rerank candidates <input name="rerank_candidates" type="number" min="1" value="20"></label>
+  <label>Results <input name="limit" type="number" min="1" value="10"></label>
+  <button class="wide">Search</button>
+</form>
+<div id="status" aria-live="polite"></div>
+<ol id="results"></ol>
+<dialog id="patent"><form method="dialog"><button>Close</button></form><div id="body"></div></dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+const el = (tag, text, cls) => { const e = document.createElement(tag); e.textContent = text ?? ""; if (cls) e.className = cls; return e; };
+let latest = 0; // ignore responses from older requests
+
+$("f").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const d = new FormData(ev.target), id = ++latest;
+  const req = {
+    query: d.get("query"),
+    hybrid: d.get("hybrid") === "1",
+    rerank: d.get("rerank"),
+    limit: Number(d.get("limit")),
+    rerank_candidates: Number(d.get("rerank_candidates")),
+    filters: { classification_prefixes: list(d.get("cls")), keywords: list(d.get("kw")), title: d.get("title") || null },
+  };
+  $("status").textContent = req.rerank === "none" ? "Searching..." : "Searching (reranking takes ~2 s)...";
+  try {
+    const r = await fetch("/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) });
+    const data = await r.json();
+    if (id !== latest) return;
+    if (!r.ok) throw new Error(JSON.stringify(data.detail));
+    $("status").textContent = `${data.results.length} results in ${data.took_ms.toFixed(1)} ms`;
+    $("results").replaceChildren(...data.results.map((p) => {
+      const li = el("li"), a = el("a", p.title || p.doc_number);
+      a.onclick = () => openPatent(p.doc_number);
+      li.append(a, el("div", `${p.doc_number} · ${p.classification ?? "no classification"} · score ${p.score.toFixed(4)}`, "meta"));
+      return li;
+    }));
+  } catch (e) {
+    if (id === latest) { $("status").textContent = "Error: " + e.message; $("results").replaceChildren(); }
+  }
+};
+
+async function openPatent(doc) {
+  const p = await (await fetch("/patents/" + encodeURIComponent(doc))).json();
+  const claims = el("ol");
+  claims.append(...p.claims.map((c) => el("li", c)));
+  $("body").replaceChildren(
+    el("h3", p.title || p.doc_number),
+    el("div", `${p.doc_number} · ${p.classification ?? "no classification"}`, "meta"),
+    el("h4", "Abstract"), el("p", p.abstract || "(none)"),
+    el("h4", `Claims (${p.claims.length})`), claims,
+  );
+  $("patent").showModal();
+}
+</script>
+</body>
+</html>
