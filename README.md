@@ -1,3 +1,6 @@
+# Video link
+https://drive.google.com/file/d/1nEO3VXFdZib7fVdR-Kr3RdF0RZ-rtoyi/view?usp=drive_link
+
 # Patent search engine
 
 Thinkstruct coding task. This README covers **Part 1** (a basic search engine with
